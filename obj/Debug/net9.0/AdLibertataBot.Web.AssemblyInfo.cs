@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AdLibertataBot.Web")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+30466984a7b5902fef18617f88ce5747cffa1add")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b65eeec94e165fa7652ac304aeceb6fc3d5df35b")]
 [assembly: System.Reflection.AssemblyProductAttribute("AdLibertataBot.Web")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AdLibertataBot.Web")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
