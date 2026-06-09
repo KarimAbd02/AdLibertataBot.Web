@@ -40,7 +40,7 @@ namespace AdLibertataBot.Web.Services.Analytics
                     "📆 За месяц:\n" +
                     "🚬 Перекуров: " + monthSmoke + "\n" +
                     "🔄 Альтернатив: " + monthAlt + "\n\n" +
-                    "🔥 Streak (дней подряд с перекурами): " + streak + "\n";
+                    "🔥 Успех (дней подряд с перекурами): " + streak + "\n";
             }
             catch (Exception ex)
             {

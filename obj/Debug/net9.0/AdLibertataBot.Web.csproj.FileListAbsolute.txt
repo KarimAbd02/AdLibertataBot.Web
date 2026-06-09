@@ -55,6 +55,7 @@
 /Users/Karim/Desktop/AdLibertataBot.Web/obj/Debug/net9.0/AdLibertataBot.Web.csproj.CoreCompileInputs.cache
 /Users/Karim/Desktop/AdLibertataBot.Web/obj/Debug/net9.0/AdLibertataBot.Web.MvcApplicationPartsAssemblyInfo.cs
 /Users/Karim/Desktop/AdLibertataBot.Web/obj/Debug/net9.0/AdLibertataBot.Web.MvcApplicationPartsAssemblyInfo.cache
+/Users/Karim/Desktop/AdLibertataBot.Web/obj/Debug/net9.0/AdLibertataBot.Web.sourcelink.json
 /Users/Karim/Desktop/AdLibertataBot.Web/obj/Debug/net9.0/rjimswa.dswa.cache.json
 /Users/Karim/Desktop/AdLibertataBot.Web/obj/Debug/net9.0/rjsmrazor.dswa.cache.json
 /Users/Karim/Desktop/AdLibertataBot.Web/obj/Debug/net9.0/rjsmcshtml.dswa.cache.json

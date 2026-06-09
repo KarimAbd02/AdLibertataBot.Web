@@ -39,9 +39,9 @@ namespace AdLibertataBot.Web.Services.Gamification
                 var description = reader.GetString(2);
                 var unlockedAt = reader.GetDateTime(3);
                 
-                message += icon + " " + name + "\n";
-                message += "   " + description + "\n";
-                message += "   Получено: " + unlockedAt.ToString("dd.MM.yyyy") + "\n\n";
+                message += $"{icon} **{name}**\n";
+                message += $"   {description}\n";
+                message += $"   Получено: {unlockedAt:dd.MM.yyyy}\n\n";
                 count++;
             }
             
@@ -53,46 +53,158 @@ namespace AdLibertataBot.Web.Services.Gamification
             return message;
         }
 
-        public async Task InitializeAchievementsAsync()
+        public async Task CheckAndAwardAchievementsAsync(int userId)
         {
-            var achievements = new[]
+            try
             {
-                ("Первые шаги", "Выбрали первую альтернативу", "🌱", 1, "alternatives"),
-                ("Осознанный выбор", "10 альтернатив выбрано", "🎯", 10, "alternatives"),
-                ("Мастер альтернатив", "50 альтернатив выбрано", "⭐", 50, "alternatives"),
-                ("Легенда альтернатив", "100 альтернатив выбрано", "👑", 100, "alternatives"),
+                await using var conn = await _db.CreateConnectionAsync();
                 
-                ("Новичок", "Набрано 100 очков", "📚", 100, "points"),
-                ("Практикующий", "Набрано 500 очков", "🎓", 500, "points"),
-                ("Эксперт", "Набрано 1000 очков", "🏆", 1000, "points"),
-                ("Гуру", "Набрано 2000 очков", "🦉", 2000, "points"),
+                // Получаем статистику пользователя
+                await using var userStatsCmd = new NpgsqlCommand(@"
+                    SELECT 
+                        u.points,
+                        u.total_alternatives,
+                        u.current_streak,
+                        u.best_streak,
+                        COALESCE((SELECT COUNT(*) FROM user_challenges WHERE user_id = u.id AND status = 2), 0) as completed_challenges,
+                        COALESCE((SELECT COUNT(*) FROM alternative_events WHERE user_id = u.id AND alternative_type = 1), 0) as breathing_count,
+                        COALESCE((SELECT COUNT(*) FROM alternative_events WHERE user_id = u.id AND alternative_type = 2), 0) as water_count,
+                        COALESCE((SELECT COUNT(*) FROM alternative_events WHERE user_id = u.id AND alternative_type = 3), 0) as exercise_count,
+                        COALESCE((SELECT COUNT(*) FROM alternative_events WHERE user_id = u.id AND alternative_type = 4), 0) as walk_count
+                    FROM users u
+                    WHERE u.id = @user_id", conn);
                 
-                ("Первый день", "Стрик 1 день", "🔥", 1, "streak"),
-                ("Неделя силы", "Стрик 7 дней", "💪", 7, "streak"),
-                ("Месяц триумфа", "Стрик 30 дней", "🎉", 30, "streak"),
-                ("Квартал победы", "Стрик 90 дней", "🌟", 90, "streak")
-            };
+                userStatsCmd.Parameters.AddWithValue("user_id", userId);
+                
+                await using var reader = await userStatsCmd.ExecuteReaderAsync();
+                if (!await reader.ReadAsync())
+                {
+                    _logger.LogWarning($"User {userId} not found");
+                    return;
+                }
+                
+                var points = reader.GetInt32(0);
+                var totalAlternatives = reader.GetInt32(1);
+                var currentStreak = reader.GetInt32(2);
+                var bestStreak = reader.GetInt32(3);
+                var completedChallenges = reader.GetInt32(4);
+                var breathingCount = reader.GetInt32(5);
+                var waterCount = reader.GetInt32(6);
+                var exerciseCount = reader.GetInt32(7);
+                var walkCount = reader.GetInt32(8);
+                
+                await reader.CloseAsync();
 
-            await using var conn = await _db.CreateConnectionAsync();
-            
-            foreach (var (name, desc, icon, points, category) in achievements)
-            {
-                await using var cmd = new NpgsqlCommand(@"
-                    INSERT INTO achievements (name, description, icon, points_required, category, is_active)
-                    VALUES (@name, @desc, @icon, @points, @category, true)
-                    ON CONFLICT DO NOTHING", 
+                // Получаем все активные достижения
+                await using var achievementsCmd = new NpgsqlCommand(
+                    "SELECT id, name, category, points_required FROM achievements WHERE is_active = true", 
                     conn);
                 
-                cmd.Parameters.AddWithValue("name", name);
-                cmd.Parameters.AddWithValue("desc", desc);
-                cmd.Parameters.AddWithValue("icon", icon);
-                cmd.Parameters.AddWithValue("points", points);
-                cmd.Parameters.AddWithValue("category", category);
-                
-                await cmd.ExecuteNonQueryAsync();
-            }
+                var achievements = new List<(int id, string category, int required)>();
+                await using var achReader = await achievementsCmd.ExecuteReaderAsync();
+                while (await achReader.ReadAsync())
+                {
+                    achievements.Add((achReader.GetInt32(0), achReader.GetString(2), achReader.GetInt32(3)));
+                }
+                await achReader.CloseAsync();
 
-            _logger.LogInformation("Achievements initialized");
+                int awardedCount = 0;
+
+                // Проверяем каждое достижение
+                foreach (var (achId, category, required) in achievements)
+                {
+                    bool earned = category switch
+                    {
+                        "alternatives" => totalAlternatives >= required,
+                        "points" => points >= required,
+                        "streak" => bestStreak >= required,
+                        "challenges" => completedChallenges >= required,
+                        "breathing" => breathingCount >= required,
+                        "water" => waterCount >= required,
+                        "exercise" => exerciseCount >= required,
+                        "walk" => walkCount >= required,
+                        _ => false
+                    };
+
+                    if (earned)
+                    {
+                        if (await AwardAchievementIfNotEarnedAsync(userId, achId, conn))
+                        {
+                            awardedCount++;
+                            
+                            // Получаем информацию о достижении для лога
+                            await using var infoCmd = new NpgsqlCommand(
+                                "SELECT name, icon FROM achievements WHERE id = @id", conn);
+                            infoCmd.Parameters.AddWithValue("id", achId);
+                            
+                            await using var infoReader = await infoCmd.ExecuteReaderAsync();
+                            if (await infoReader.ReadAsync())
+                            {
+                                var name = infoReader.GetString(0);
+                                var icon = infoReader.GetString(1);
+                                _logger.LogInformation($"User {userId} earned achievement: {icon} {name}");
+                            }
+                        }
+                    }
+                }
+                
+                if (awardedCount > 0)
+                {
+                    _logger.LogInformation($"User {userId} earned {awardedCount} new achievements");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error checking achievements for user {userId}");
+            }
+        }
+
+        private async Task<bool> AwardAchievementIfNotEarnedAsync(int userId, int achievementId, NpgsqlConnection conn)
+        {
+            try
+            {
+                // Проверяем, есть ли уже такое достижение
+                await using var checkCmd = new NpgsqlCommand(
+                    "SELECT COUNT(*) FROM user_achievements WHERE user_id = @user_id AND achievement_id = @ach_id",
+                    conn);
+                
+                checkCmd.Parameters.AddWithValue("user_id", userId);
+                checkCmd.Parameters.AddWithValue("ach_id", achievementId);
+                
+                var count = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
+                if (count > 0) return false;
+
+                // Добавляем достижение
+                await using var awardCmd = new NpgsqlCommand(
+                    "INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (@user_id, @ach_id, @unlocked_at)",
+                    conn);
+                
+                awardCmd.Parameters.AddWithValue("user_id", userId);
+                awardCmd.Parameters.AddWithValue("ach_id", achievementId);
+                awardCmd.Parameters.AddWithValue("unlocked_at", DateTime.UtcNow);
+                
+                await awardCmd.ExecuteNonQueryAsync();
+                
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error awarding achievement {achievementId} to user {userId}");
+                return false;
+            }
+        }
+
+        // Метод для проверки после действий
+        public async Task CheckActionAchievementsAsync(int userId, string actionType)
+        {
+            try
+            {
+                await CheckAndAwardAchievementsAsync(userId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error checking action achievements for user {userId}");
+            }
         }
     }
 }

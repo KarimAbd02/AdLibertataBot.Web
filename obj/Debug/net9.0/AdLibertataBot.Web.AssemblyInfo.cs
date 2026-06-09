@@ -10,10 +10,11 @@
 using System;
 using System.Reflection;
 
+[assembly: Microsoft.Extensions.Configuration.UserSecrets.UserSecretsIdAttribute("d081f54e-57a3-4cfa-942a-709135cdd6b4")]
 [assembly: System.Reflection.AssemblyCompanyAttribute("AdLibertataBot.Web")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+30466984a7b5902fef18617f88ce5747cffa1add")]
 [assembly: System.Reflection.AssemblyProductAttribute("AdLibertataBot.Web")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AdLibertataBot.Web")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

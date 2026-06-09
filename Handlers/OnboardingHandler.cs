@@ -70,7 +70,7 @@ namespace AdLibertataBot.Web.Handlers
 
             await _bot.SendTextMessageAsync(
                 chatId,
-                "👋 Добро пожаловать в Ad Libertata Work!\n\nВыберите вашу роль:",
+                "👋 Добро пожаловать в Ad Libertata Work!\n\nВыберите Вашу роль:",
                 replyMarkup: keyboard,
                 cancellationToken: cancellationToken);
 
@@ -117,7 +117,7 @@ namespace AdLibertataBot.Web.Handlers
 
         private async Task HandleRoleSelection(string chatId, string text, UserState state, CancellationToken cancellationToken)
 {
-    if (text.Contains("👤 Пользователь") || text.Contains("👤 Войти как пользователь"))
+    if (text.Contains("👤 Пользователь") || text.Contains("👤 Войти, как пользователь"))
     {
         state.Role = UserRole.User;
         state.Step = OnboardingStep.CompanyCode;
@@ -144,7 +144,7 @@ namespace AdLibertataBot.Web.Handlers
             {
                 await _bot.SendTextMessageAsync(
                     chatId,
-                    "👤 Вход как **Пользователь**\n\nВведите корпоративный код:",
+                    "👤 Вход, как Пользователь\n\nВведите корпоративный код:",
                     replyMarkup: new ReplyKeyboardRemove(),
                     cancellationToken: cancellationToken);
             }
@@ -153,7 +153,7 @@ namespace AdLibertataBot.Web.Handlers
         {
             await _bot.SendTextMessageAsync(
                 chatId,
-                "👤 Вы выбрали роль **Пользователь**\n\nВведите корпоративный код:",
+                "👤 Вы выбрали роль Пользователь\n\nВведите корпоративный код:",
                 replyMarkup: new ReplyKeyboardRemove(),
                 cancellationToken: cancellationToken);
         }
@@ -166,7 +166,7 @@ namespace AdLibertataBot.Web.Handlers
         
         await _bot.SendTextMessageAsync(
             chatId,
-            "👨‍💼 Вход как **Администратор**\n\nВведите корпоративный код компании:",
+            "👨‍💼 Вход, как Администратор\n\nВведите корпоративный код компании:",
             replyMarkup: new ReplyKeyboardRemove(),
             cancellationToken: cancellationToken);
     }
@@ -229,10 +229,6 @@ namespace AdLibertataBot.Web.Handlers
 
         private async Task HandleFagerstromTest(string chatId, string text, UserState state, CancellationToken cancellationToken)
         {
-            // Обработка теста Фагерстрема (оставь свою текущую логику)
-            // ...
-            
-            // После завершения теста:
             state.Step = OnboardingStep.SmokingExperience;
             await _stateService.SaveFullStateAsync(state);
             
@@ -285,78 +281,77 @@ namespace AdLibertataBot.Web.Handlers
         }
 
         private async Task HandleGoalSelection(string chatId, string text, UserState state, CancellationToken cancellationToken)
+{
+    if (state.Role == UserRole.Admin)
+    {
+        // АДМИН - проверяем пароль
+        var admin = await _adminService.GetAdminByPasswordAsync(text, state.CompanyId.Value);
+        
+        if (admin == null)
         {
-            if (state.Role == UserRole.Admin)
-            {
-                // АДМИН - проверяем пароль
-                var admin = await _adminService.GetAdminByPasswordAsync(text, state.CompanyId.Value);
-                
-                if (admin == null)
-                {
-                    await _bot.SendTextMessageAsync(
-                        chatId,
-                        "❌ Неверный пароль. Попробуйте снова:",
-                        cancellationToken: cancellationToken);
-                    return;
-                }
-
-                // Успешная авторизация админа
-                await _stateService.DeleteUserStateAsync(chatId);
-                
-                var keyboard = new ReplyKeyboardMarkup(new[]
-                {
-                    new KeyboardButton[] { new("📊 Отчёт"), new("🏆 Топ") },
-                    new KeyboardButton[] { new("👥 Статистика") },
-                    new KeyboardButton[] { new("🚪 Выйти") }
-                })
-                {
-                    ResizeKeyboard = true
-                };
-
-                await _bot.SendTextMessageAsync(
-                    chatId,
-                    $"👨‍💼 Добро пожаловать, {admin.FullName}!\nАдмин-панель:",
-                    replyMarkup: keyboard,
-                    cancellationToken: cancellationToken);
-            }
-            else
-            {
-                // ПОЛЬЗОВАТЕЛЬ - завершаем регистрацию
-                if (!int.TryParse(text.Trim(), out int goal) || goal < 1 || goal > 4)
-                {
-                    await _bot.SendTextMessageAsync(
-                        chatId,
-                        "Введите номер от 1 до 4",
-                        cancellationToken: cancellationToken);
-                    return;
-                }
-
-                // Проверяем, есть ли пользователь
-                var existingUser = await _userService.GetUserAsync(chatId);
-                int userId;
-
-                if (existingUser != null)
-                {
-                    userId = existingUser.Id;
-                    await _userService.UpdateUserGoalAsync(userId, (UserGoal)goal);
-                }
-                else
-                {
-                    userId = await _userService.CreateUserAsync(chatId, state.CompanyId.Value, (UserGoal)goal);
-                }
-
-                // Сохраняем диагностику
-                // ... (твоя текущая логика)
-
-                // Завершаем онбординг
-                await _stateService.DeleteUserStateAsync(chatId);
-
-                await _bot.SendTextMessageAsync(
-                    chatId,
-                    "🎉 Регистрация завершена! Теперь вы можете использовать бота.",
-                    replyMarkup: CommandHandler.GetMainKeyboard(),
-                    cancellationToken: cancellationToken);
-            }
+            await _bot.SendTextMessageAsync(
+                chatId,
+                "❌ Неверный пароль. Попробуйте снова:",
+                cancellationToken: cancellationToken);
+            return;
         }
+
+        // ✅ ВАЖНО: НЕ удаляем состояние админа! Оставляем его в базе
+        // Просто показываем админ-панель
+        
+        await _bot.SendTextMessageAsync(
+            chatId,
+            $"👨‍💼 Добро пожаловать, {admin.FullName}!\nАдмин-панель:",
+            replyMarkup: AdminHandler.GetAdminKeyboard(),
+            cancellationToken: cancellationToken);
+    }
+    else
+    {
+        // ПОЛЬЗОВАТЕЛЬ - завершаем регистрацию
+        if (!int.TryParse(text.Trim(), out int goal) || goal < 1 || goal > 4)
+        {
+            await _bot.SendTextMessageAsync(
+                chatId,
+                "Введите номер от 1 до 4",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        // Проверяем, есть ли пользователь
+        var existingUser = await _userService.GetUserAsync(chatId);
+        int userId;
+
+        if (existingUser != null)
+        {
+            userId = existingUser.Id;
+            await _userService.UpdateUserGoalAsync(userId, (UserGoal)goal);
+        }
+        else
+        {
+            userId = await _userService.CreateUserAsync(chatId, state.CompanyId.Value, (UserGoal)goal);
+        }
+
+        // Сохраняем диагностику
+        var diagnostic = new UserDiagnostic
+        {
+            UserId = userId,
+            SmokingExperience = state.SmokingExperience.Value,
+            CigarettesPerDay = state.CigarettesPerDay.Value,
+            GoalType = (UserGoal)goal,
+            CreatedAt = DateTime.UtcNow
+        };
+        
+        await _diagnosticService.SaveUserDiagnosticAsync(diagnostic);
+
+        // Завершаем онбординг - удаляем состояние для пользователя
+        await _stateService.DeleteUserStateAsync(chatId);
+
+        await _bot.SendTextMessageAsync(
+            chatId,
+            "🎉 Регистрация завершена! Теперь вы можете использовать бота.",
+            replyMarkup: CommandHandler.GetMainKeyboard(),
+            cancellationToken: cancellationToken);
+    }
+}
     }
 }

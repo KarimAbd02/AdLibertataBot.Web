@@ -1,12 +1,14 @@
 using Telegram.Bot;
 using Telegram.Bot.Types.ReplyMarkups;
 using AdLibertataBot.Web.Data;
+using Telegram.Bot.Types.Enums;
 using AdLibertataBot.Web.Services.Core;
 using AdLibertataBot.Web.Services.User;
 using AdLibertataBot.Web.Services.Analytics;
 using AdLibertataBot.Web.Services.Content;
 using AdLibertataBot.Web.Services.Gamification;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace AdLibertataBot.Web.Handlers
 {
@@ -15,32 +17,35 @@ namespace AdLibertataBot.Web.Handlers
         private readonly ITelegramBotClient _bot;
         private readonly UserService _userService;
         private readonly UserStateService _stateService;
-        private readonly OnboardingHandler _onboardingHandler; // Добавь эту строку
+        private readonly OnboardingHandler _onboardingHandler;
         private readonly ProgressService _progressService;
         private readonly FactService _factService;
         private readonly PointsService _pointsService;
         private readonly AchievementService _achievementService;
+        private readonly DatabaseService _db;
         private readonly ILogger<CommandHandler> _logger;
 
         public CommandHandler(
             ITelegramBotClient bot,
             UserService userService,
             UserStateService stateService,
-            OnboardingHandler onboardingHandler, // Добавь параметр
+            OnboardingHandler onboardingHandler,
             ProgressService progressService,
             FactService factService,
             PointsService pointsService,
             AchievementService achievementService,
+            DatabaseService db,
             ILogger<CommandHandler> logger)
         {
             _bot = bot;
             _userService = userService;
             _stateService = stateService;
-            _onboardingHandler = onboardingHandler; // Инициализируй
+            _onboardingHandler = onboardingHandler;
             _progressService = progressService;
             _factService = factService;
             _pointsService = pointsService;
             _achievementService = achievementService;
+            _db = db;
             _logger = logger;
         }
 
@@ -68,6 +73,10 @@ namespace AdLibertataBot.Web.Handlers
                     
                     case "/points":
                         await HandlePointsAsync(chatId, cancellationToken);
+                        break;
+                    
+                    case "/challenges":
+                        await HandleChallengesListAsync(chatId, cancellationToken);
                         break;
                     
                     default:
@@ -133,6 +142,7 @@ namespace AdLibertataBot.Web.Handlers
                           "/start - главное меню\n" +
                           "/stats - статистика\n" +
                           "/achievements - достижения\n" +
+                          "/challenges - история челленджей\n" +
                           "/points - информация об очках\n" +
                           "/help - эта справка";
             
@@ -191,6 +201,66 @@ namespace AdLibertataBot.Web.Handlers
             await _bot.SendTextMessageAsync(
                 chatId,
                 explanation,
+                replyMarkup: GetMainKeyboard(),
+                cancellationToken: cancellationToken);
+        }
+
+        private async Task HandleChallengesListAsync(string chatId, CancellationToken cancellationToken)
+        {
+            var user = await _userService.GetUserAsync(chatId);
+            if (user == null)
+            {
+                await _bot.SendTextMessageAsync(
+                    chatId, 
+                    "Сначала зарегистрируйтесь через /start", 
+                    replyMarkup: new ReplyKeyboardRemove(),
+                    cancellationToken: cancellationToken);
+                return;
+            }
+
+            await using var conn = await _db.CreateConnectionAsync();
+            await using var cmd = new NpgsqlCommand(@"
+                SELECT c.title, uc.status, uc.assigned_at, uc.completed_at, uc.points_earned
+                FROM user_challenges uc
+                JOIN challenges c ON uc.challenge_id = c.id
+                WHERE uc.user_id = @user_id
+                ORDER BY uc.assigned_at DESC
+                LIMIT 10", conn);
+            
+            cmd.Parameters.AddWithValue("user_id", user.Id);
+            
+            var message = "📋 История челленджей\n\n";
+            var hasItems = false;
+            
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                hasItems = true;
+                var title = reader.GetString(0);
+                var status = (ChallengeStatus)reader.GetInt32(1);
+                var assignedAt = reader.GetDateTime(2);
+                
+                message += $"🏆 {title}\n";
+                message += $"📅 {assignedAt:dd.MM.yyyy}\n";
+                message += status == ChallengeStatus.Completed ? "✅ Выполнен" : 
+                          status == ChallengeStatus.Skipped ? "❌ Пропущен" : "⏳ В процессе";
+                
+                if (status == ChallengeStatus.Completed)
+                {
+                    message += $" | +{reader.GetInt32(4)} очков";
+                }
+                message += "\n\n";
+            }
+            
+            if (!hasItems)
+            {
+                message += "У Вас пока нет выполненных челленджей.\nНажмите 'Челлендж 🏆' чтобы взять первый!";
+            }
+            
+            await _bot.SendTextMessageAsync(
+                chatId,
+                message,
+                parseMode: ParseMode.Markdown,
                 replyMarkup: GetMainKeyboard(),
                 cancellationToken: cancellationToken);
         }

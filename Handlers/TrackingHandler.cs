@@ -135,6 +135,14 @@ namespace AdLibertataBot.Web.Handlers
                         await HandleChallengeAsync(user, cancellationToken);
                         break;
                     
+                    case "✅ Выполнил челлендж":
+                        await HandleCompleteChallengeAsync(user, cancellationToken);
+                        break;
+                    
+                    case "❌ Пропустить":
+                        await HandleSkipChallengeAsync(user, cancellationToken);
+                        break;
+                    
                     case "Мотивация 💫":
                         await HandleMotivationAsync(user, cancellationToken);
                         break;
@@ -194,11 +202,7 @@ namespace AdLibertataBot.Web.Handlers
             
             await _bot.SendTextMessageAsync(
                 user.ChatId,
-                await _messageService.GetTextAsync("craving_postponed", new()
-                {
-                    ["minutes"] = minutes.ToString(),
-                    ["points"] = points.ToString()
-                }),
+                $"⏰ Вы отложили перекур на {minutes} минут!\n\n💰 +{points} очков\n💪 Так держать! Используйте это время для альтернативы.",
                 replyMarkup: CommandHandler.GetMainKeyboard(),
                 cancellationToken: cancellationToken);
 
@@ -209,7 +213,7 @@ namespace AdLibertataBot.Web.Handlers
                 {
                     await _bot.SendTextMessageAsync(
                         user.ChatId,
-                        "⏰ Время вышло! Как ваше состояние сейчас?",
+                        "⏰ Время вышло! Как Ваше состояние сейчас?",
                         replyMarkup: GetCravingKeyboard(),
                         cancellationToken: cancellationToken);
                 }
@@ -230,7 +234,7 @@ namespace AdLibertataBot.Web.Handlers
             
             await _bot.SendTextMessageAsync(
                 user.ChatId,
-                await _messageService.GetSmokeRecordedAsync(motivation),
+                $"🚬 Записано. {motivation}",
                 replyMarkup: CommandHandler.GetMainKeyboard(),
                 cancellationToken: cancellationToken);
         }
@@ -239,7 +243,7 @@ namespace AdLibertataBot.Web.Handlers
         {
             await _bot.SendTextMessageAsync(
                 user.ChatId,
-                await _messageService.GetAlternativeMenuAsync() + "\n\n" +
+                "🌿 Выберите здоровую альтернативу:\n\n" +
                 "🫁 Дыхание - дыхательные техники\n" +
                 "💧 Вода/чай - выпить стакан воды\n" +
                 "💪 Зарядка - мини разминка\n" +
@@ -307,12 +311,7 @@ namespace AdLibertataBot.Web.Handlers
 
             await _bot.SendTextMessageAsync(
                 user.ChatId,
-                await _messageService.GetTextAsync("alternative_completed", new()
-                {
-                    ["emoji"] = emoji,
-                    ["message"] = message,
-                    ["points"] = points.ToString()
-                }),
+                $"{emoji} {message}\n\n💰 +{points} очков\n✨ Отличная замена перекуру!",
                 replyMarkup: CommandHandler.GetMainKeyboard(),
                 cancellationToken: cancellationToken);
         }
@@ -344,17 +343,41 @@ namespace AdLibertataBot.Web.Handlers
             
             if (activeChallenge != null)
             {
-                await _bot.SendTextMessageAsync(
-                    user.ChatId,
-                    await _messageService.GetTextAsync("challenge_active"),
-                    replyMarkup: CommandHandler.GetMainKeyboard(),
-                    cancellationToken: cancellationToken);
+                // Показываем активный челлендж с кнопкой выполнения
+                var challenge = await _challengeService.GetChallengeByIdAsync(activeChallenge.ChallengeId);
+                if (challenge != null)
+                {
+                    var timeLeft = DateTime.UtcNow - activeChallenge.AssignedAt;
+                    var hoursLeft = challenge.Duration.TotalHours - timeLeft.TotalHours;
+                    
+                    var message = $"📋 **Активный челлендж**\n\n" +
+                                 $"🏆 {challenge.Title}\n" +
+                                 $"📝 {challenge.Description}\n\n" +
+                                 $"⏱ Осталось: {Math.Max(0, (int)hoursLeft)}ч\n" +
+                                 $"💰 Награда: {challenge.PointsReward} очков\n\n" +
+                                 $"✅ Когда выполните - нажмите кнопку ниже!";
+
+                    var keyboard = new ReplyKeyboardMarkup(new[]
+                    {
+                        new KeyboardButton[] { "✅ Выполнил челлендж", "❌ Пропустить" },
+                        new KeyboardButton[] { "Назад ↩️" }
+                    })
+                    { ResizeKeyboard = true };
+
+                    await _bot.SendTextMessageAsync(
+                        user.ChatId,
+                        message,
+                        parseMode: ParseMode.Markdown,
+                        replyMarkup: keyboard,
+                        cancellationToken: cancellationToken);
+                }
                 return;
             }
 
-            var challenge = await _challengeService.GetRandomChallengeAsync();
+            // Берем новый челлендж
+            var newChallenge = await _challengeService.GetRandomChallengeAsync();
             
-            if (challenge == null)
+            if (newChallenge == null)
             {
                 await _bot.SendTextMessageAsync(
                     user.ChatId,
@@ -364,17 +387,80 @@ namespace AdLibertataBot.Web.Handlers
                 return;
             }
 
-            await _challengeService.AssignChallengeAsync(user.Id, challenge.Id);
+            await _challengeService.AssignChallengeAsync(user.Id, newChallenge.Id);
+            
+            var assignMessage = $"🎯 **Новый челлендж!**\n\n" +
+                               $"🏆 {newChallenge.Title}\n" +
+                               $"📝 {newChallenge.Description}\n\n" +
+                               $"⏱ На выполнение: {newChallenge.Duration.TotalHours}ч\n" +
+                               $"💰 Награда: {newChallenge.PointsReward} очков\n\n" +
+                               $"Когда выполните - нажмите 'Челлендж 🏆' снова и подтвердите выполнение!";
+
+            await _bot.SendTextMessageAsync(
+                user.ChatId,
+                assignMessage,
+                parseMode: ParseMode.Markdown,
+                replyMarkup: CommandHandler.GetMainKeyboard(),
+                cancellationToken: cancellationToken);
+        }
+
+        private async Task HandleCompleteChallengeAsync(AppUser user, CancellationToken cancellationToken)
+        {
+            var activeChallenge = await _challengeService.GetActiveChallengeAsync(user.Id);
+    
+            if (activeChallenge == null)
+            {
+                await _bot.SendTextMessageAsync(
+                    user.ChatId,
+                    "У Вас нет активного челленджа!",
+                    replyMarkup: CommandHandler.GetMainKeyboard(),
+                    cancellationToken: cancellationToken);
+                return;
+            }
+
+            // Получаем информацию о челлендже, включая количество очков
+            var challenge = await _challengeService.GetChallengeByIdAsync(activeChallenge.ChallengeId);
+    
+            if (challenge == null)
+            {
+                await _bot.SendTextMessageAsync(
+                    user.ChatId,
+                    "Ошибка: челлендж не найден",
+                    replyMarkup: CommandHandler.GetMainKeyboard(),
+                    cancellationToken: cancellationToken);
+                return;
+            }
+
+            // Завершаем челлендж и получаем количество начисленных очков
+            await _challengeService.CompleteChallengeAsync(user.Id, activeChallenge.Id);
+    
+            await _bot.SendTextMessageAsync(
+                user.ChatId,
+                $"🎉 Поздравляю с выполнением!\n💰 +{challenge.PointsReward} очков начислено!",
+                replyMarkup: CommandHandler.GetMainKeyboard(),
+                cancellationToken: cancellationToken);
+        }
+
+        private async Task HandleSkipChallengeAsync(AppUser user, CancellationToken cancellationToken)
+        {
+            var activeChallenge = await _challengeService.GetActiveChallengeAsync(user.Id);
+            
+            if (activeChallenge == null)
+            {
+                await _bot.SendTextMessageAsync(
+                    user.ChatId,
+                    "У Вас нет активного челленджа!",
+                    replyMarkup: CommandHandler.GetMainKeyboard(),
+                    cancellationToken: cancellationToken);
+                return;
+            }
+
+            // Пропускаем челлендж
+            await _challengeService.SkipChallengeAsync(user.Id, activeChallenge.Id);
             
             await _bot.SendTextMessageAsync(
                 user.ChatId,
-                await _messageService.GetTextAsync("challenge_assigned", new()
-                {
-                    ["title"] = challenge.Title,
-                    ["description"] = challenge.Description,
-                    ["duration"] = challenge.Duration.TotalMinutes.ToString(),
-                    ["points"] = challenge.PointsReward.ToString()
-                }),
+                "❌ Челлендж пропущен. Можно взять новый!",
                 replyMarkup: CommandHandler.GetMainKeyboard(),
                 cancellationToken: cancellationToken);
         }
@@ -389,6 +475,7 @@ namespace AdLibertataBot.Web.Handlers
                 replyMarkup: CommandHandler.GetMainKeyboard(),
                 cancellationToken: cancellationToken);
         }
+
         private async Task HandleLogoutAsync(string chatId, CancellationToken cancellationToken)
         {
             // Полностью очищаем состояние
@@ -400,6 +487,7 @@ namespace AdLibertataBot.Web.Handlers
                 replyMarkup: new ReplyKeyboardRemove(),
                 cancellationToken: cancellationToken);
         }
+
         private static IReplyMarkup GetCravingKeyboard()
         {
             return new ReplyKeyboardMarkup(new[]

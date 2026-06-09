@@ -130,6 +130,10 @@ namespace AdLibertataBot.Web.Services.User
                 throw;
             }
         }
+        
+        
+        
+        
         public async Task UpdateUserStatsAsync(int userId, bool isSmoke, bool isAlternative)
         {
             try

@@ -21,7 +21,7 @@ namespace AdLibertataBot.Web.Services.Core
             _cache["error_generic"] = "❌ Произошла ошибка. Пожалуйста, попробуйте позже.";
             _cache["error_use_buttons"] = "Пожалуйста, используйте кнопки меню 👇";
             _cache["main_menu"] = "Выберите действие:";
-            _cache["craving_detected"] = "🧘 Я чувствую, что вы хотите курить. Давайте вместе справимся с этим!";
+            _cache["craving_detected"] = "🧘 Я чувствую, что Вы хотите курить. Давайте вместе справимся с этим!";
             _cache["alternative_menu"] = "🌿 Выберите здоровую альтернативу:";
             _cache["smoke_recorded"] = "🚬 Записано. {motivation}";
             _cache["stats_header"] = "📊 Ваша статистика";

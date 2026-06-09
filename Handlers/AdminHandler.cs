@@ -15,33 +15,8 @@ namespace AdLibertataBot.Web.Handlers
             _logger = logger;
         }
 
-        public async Task HandleAdminLoginAsync(string chatId, string text, CancellationToken cancellationToken)
-        {
-            // Обработка ввода пароля администратора
-            // После успешной проверки показываем админ-панель
-            await ShowAdminPanel(chatId, cancellationToken);
-        }
-
-        private async Task ShowAdminPanel(string chatId, CancellationToken cancellationToken)
-        {
-            var keyboard = new ReplyKeyboardMarkup(new[]
-            {
-                new KeyboardButton[] { new("📊 Отчёт компании"), new("🏆 Топ сотрудников") },
-                new KeyboardButton[] { new("👥 Статистика пользователей") },
-                new KeyboardButton[] { new("🚪 Выйти из админки") }
-            })
-            {
-                ResizeKeyboard = true,
-                OneTimeKeyboard = false
-            };
-
-            await _bot.SendTextMessageAsync(
-                chatId,
-                "👨‍💼 **Админ-панель**\n\n" +
-                "Выберите действие:",
-                replyMarkup: keyboard,
-                cancellationToken: cancellationToken);
-        }
+        // Этот метод больше не нужен, так как логика в BotOrchestrator
+        // public async Task HandleAdminLoginAsync(string chatId, string text, CancellationToken cancellationToken) { }
 
         public static ReplyKeyboardMarkup GetAdminKeyboard()
         {

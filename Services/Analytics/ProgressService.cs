@@ -86,7 +86,7 @@ namespace AdLibertataBot.Web.Services.Analytics
             var message = "🎯 Ваш прогресс\n\n";
             message += $"📊 Уровень: {level} ⭐\n";
             message += $"💰 Очков: {points}\n\n";
-            message += "🔥 Стрики:\n";
+            message += "🔥 Успех:\n";
             message += $"   Текущий: {currentStreak} дней\n";
             message += $"   Лучший: {bestStreak} дней\n\n";
             message += "📈 Всего за всё время:\n";
