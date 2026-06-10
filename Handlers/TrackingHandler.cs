@@ -304,7 +304,7 @@ namespace AdLibertataBot.Web.Handlers
                 AlternativeType.Water => ("💧", "Вода - отличный выбор! Организм благодарит вас."),
                 AlternativeType.Exercise => ("💪", "Отлично! Небольшая разминка взбодрит тело."),
                 AlternativeType.Walk => ("🚶", "Прогулка - прекрасная альтернатива!"),
-                AlternativeType.FiveSenses => ("👃", """
+                AlternativeType.FiveSenses => ("", """
                                                      💫 Сосредоточьтесь на настоящем моменте:
 
                                                      • 5 вещей, которые вы видите
